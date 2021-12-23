@@ -29,7 +29,7 @@ opportunity!  Fortunately Azure IoT supports a variety of high level languages o
 Along the way, I picked up some good learning with tooling, etc.
 
 ### Visual Studio Code and WSL
-I have Windows Subsystem for Linux running on my machine, with a Debian distribution (to keep it close to Raspbabian).  I learnt how to use VS Code directly with WSL.
+I have Windows Subsystem for Linux running on my machine, with a Debian distribution (to keep it close to Raspabian).  I learnt how to use VS Code directly with WSL.
 You first have to install the Visual Studio Code Remove Development Extension [pack](https://marketplace.visualstudio.com/items?itemName=ms-vscode-remote.vscode-remote-extensionpack).  Then you fire up your Debian Bash shell and navigate to the location of your project and type in "code .".  The first time you do this, it will install
 a small server to allow VS Code to interact with WSL.
 
