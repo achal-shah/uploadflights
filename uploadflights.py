@@ -31,6 +31,7 @@ import threading
 import time
 
 from datetime import datetime, timedelta, timezone
+from dataclasses import dataclass
 
 # Constants
 DEFAULT_TARGET_HOST = "localhost"
@@ -41,6 +42,44 @@ device_id = 166244
 nextfire = time.time()
 done = False
 seen_flights = {}
+
+@dataclass
+class FlightInformationDto:
+    """Struct to capture flight information."""
+    ModeSCode: str = None
+    Location: str = None
+    FlightNumber: str = None
+    Altitude: int = 0
+    Latitude: float = None
+    Longitude: float = None
+    Heading: float = None
+    AscentCount: int = 0
+    TimeAtLocation: datetime = None
+    UploadedTime: datetime = None
+
+    def is_descending(self) -> bool:
+        return self.AscentCount < 0
+
+    def is_ascending(self) -> bool:
+        return self.AscentCount > 0
+
+    def is_level(self) -> bool:
+        return self.AscentCount == 0
+
+    def to_dictionary(self):
+        my_fields = {
+            "ModeSCode": self.ModeSCode,
+            "Location": self.Location,
+            "FlightNumber": self.FlightNumber,
+            "Altitude": self.Altitude,
+            "Latitude": self.Latitude,
+            "Longitude": self.Longitude,
+            "Heading": self.Heading,
+            "AscentCount": self.AscentCount,
+            "TimeAtLocation": self.TimeAtLocation.isoformat(),
+            "UploadedTime": self.UploadedTime.isoformat()
+        }
+        return my_fields
 
 def signal_handler(signum, frame):
     """ Handles termination signals from the keyboard or the OS
@@ -62,24 +101,24 @@ def get_altitude(flight_record):
     return altitude
 
 
-def update_flight_info(flight_info, flight_record, now):
+def update_flight_info(flight_info: FlightInformationDto, flight_record, now):
     altitude = get_altitude(flight_record)
 
-    if ('lat' in flight_record): flight_info["Latitude"] = flight_record["lat"]
-    if ('lon' in flight_record): flight_info["Longitude"] = flight_record["lon"]
-    if ('track' in flight_record): flight_info["Heading"] = flight_record["track"]
-    flight_info["TimeAtLocation"] = (now + timedelta(seconds=flight_record["seen"])).isoformat()
+    if ('lat' in flight_record): flight_info.Latitude = flight_record["lat"]
+    if ('lon' in flight_record): flight_info.Longitude = flight_record["lon"]
+    if ('track' in flight_record): flight_info.Heading = flight_record["track"]
+    flight_info.TimeAtLocation = (now - timedelta(seconds=flight_record["seen"]))
 
 def cleanup_seen_flights():
     global seen_flights
 
     remove_list = []
     for flight in seen_flights.values():
-        if ('UploadedTime' in flight):
-            uploaded_time = flight['UploadedTime']
+        if (flight.UploadedTime != None):
+            uploaded_time = flight.UploadedTime
             if (datetime.now(timezone.utc) > uploaded_time + timedelta(minutes=DATA_TTL_AFTER_UPLOAD_MINUTES)):
-                print(flight["FlightNumber"])
-                remove_list.append(flight["ModeSCode"])
+                print(flight.FlightNumber)
+                remove_list.append(flight.ModeSCode)
 
     print(remove_list)
     for item in remove_list:
@@ -88,30 +127,29 @@ def cleanup_seen_flights():
 
 
 
-def populate_flight_info(flight_info, flight_record, now):
-    flight_info['ModeSCode'] = flight_record['hex'].strip()
-    flight_info['Location'] = device_id
-    flight_info['FlightNumber'] = flight_record['flight'].strip()
+def populate_flight_info(flight_info: FlightInformationDto, flight_record, now):
+    flight_info.ModeSCode = flight_record['hex'].strip()
+    flight_info.Location = device_id
+    flight_info.FlightNumber = flight_record['flight'].strip()
 
     altitude = get_altitude(flight_record)
 
-    if ('Altitude' not in flight_info): # first time seeing this
-        flight_info["Altitude"] = altitude
+    if (flight_info.Altitude == 0): # first time seeing this
+        flight_info.Altitude = altitude
         update_flight_info(flight_info, flight_record, now)
     else:
-        if (altitude != flight_info["Altitude"]):
-            ascent_count = 0
-            if ('AscentCount' in flight_info): ascent_count = flight_info["AscentCount"]
-            if (altitude < (flight_info["Altitude"] - 25 )): # Allow for jitter
+        if (altitude != flight_info.Altitude):
+            ascent_count = flight_info.AscentCount
+            if (altitude < (flight_info.Altitude - 25 )): # Allow for jitter
                 ascent_count -= 1
-            elif (altitude > (flight_info["Altitude"] + 25 )):
+            elif (altitude > (flight_info.Altitude + 25 )):
                 ascent_count += 1
             
-            flight_info["AscentCount"] = ascent_count
-            if (ascent_count <= 0): # descending or level - earliest complete record
-                if ('Latitude' not in flight_info or 'Longitude' not in flight_info or 'Heading' not in flight_info):
+            flight_info.AscentCount = ascent_count
+            if (flight_info.is_descending or flight_info.is_level):
+                if (flight_info.Latitude == None or flight_info.Longitude == None or flight_info.Heading == None):
                     update_flight_info(flight_info, flight_record, now)
-            else: # ascending - latest complete record
+            else:
                 update_flight_info(flight_info, flight_record, now)
 
 
@@ -129,31 +167,32 @@ def process_flight_records(flights):
         if ('seen' not in value): continue
         
         seen_ago = value['seen']
-        flight_info_dto = {}
+        flight_info_dto = FlightInformationDto()
         if (value['hex'] in seen_flights):  # have we already seen this flight?
             flight_info_dto = seen_flights[value['hex']]
-            if ('UploadedTime' in flight_info_dto): continue # the record has already been uploaded, so ignore
+            if (flight_info_dto.UploadedTime != None): continue # the record has already been uploaded, so ignore
             if (seen_ago > DATA_TIME_INTERVAL_SECONDS): # it's been over 10s since we saw this plane in a previous frame, no fresh data
                 current_flights[value['hex']] = flight_info_dto
                 continue
         
         populate_flight_info(flight_info_dto, value, now)
-        current_flights[flight_info_dto["ModeSCode"]] = flight_info_dto
+        current_flights[flight_info_dto.ModeSCode] = flight_info_dto
 
-        if (flight_info_dto["ModeSCode"] not in seen_flights):
-            seen_flights[flight_info_dto["ModeSCode"]] = flight_info_dto
+        if (flight_info_dto.ModeSCode not in seen_flights):
+            seen_flights[flight_info_dto.ModeSCode] = flight_info_dto
 
     upload_list = []
     print("************* seen ******************")
     for flight in seen_flights.values():
-        print(flight["FlightNumber"])
-        if ('UploadedTime' not in flight) and (flight["ModeSCode"] not in current_flights):
+        print(flight.FlightNumber)
+        if (flight.UploadedTime == None) and (flight.ModeSCode not in current_flights):
             upload_list.append(flight)
-            flight['UploadedTime'] = datetime.now(timezone.utc)
+            flight.UploadedTime = datetime.now(timezone.utc)
     
     print("************* upload ******************")
     for flight in upload_list:
-        print(flight["FlightNumber"] + " " + flight["UploadedTime"].isoformat())
+        print(flight)
+        print(json.dumps(flight.to_dictionary(), sort_keys = False, indent = 4))
 
     print("************* clean ******************")
     cleanup_seen_flights()
