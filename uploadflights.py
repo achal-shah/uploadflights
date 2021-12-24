@@ -187,7 +187,7 @@ def main():
     signal.signal(signal.SIGTERM, signal_handler)
 
     target_ip = DEFAULT_TARGET_HOST
-    if (len(sys.argv) > 0):
+    if (len(sys.argv) > 1):
         target_ip = sys.argv[1]
     
     request_uri = 'http://{}:8080/data/aircraft.json'.format(target_ip)
