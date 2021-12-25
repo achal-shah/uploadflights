@@ -47,11 +47,16 @@ Next, the Python device libraries can be installed (and listed) by:
     pip3 list
     
 ### Requests library
-A high level HTTP [library](https://2.python-requests.org/en/latest/) for Python. Makes writing HTTP request-response code in Python a breeze.  It has a built-in JSON decoder.
+A high level HTTP [library](https://2.python-requests.org/en/latest/) for Python. Makes writing HTTP request-response code in Python a breeze.  It has a built-in JSON decoder.  If there is a warning about dependencies, follow:
+
+    sudo apt remove chardet
+    pip3 install charset-normalizer
+    pip3 install requests
 
 ## Resources
 1. Python style [guide](https://www.python.org/dev/peps/pep-0008/#comments).
 1. Python [documentation](https://docs.python.org/3/)
 1. Upgrade Debian from Stretch to Buster.  I used these [instructions](https://davidsmith.is/2019/07/11/updating-your-wsl-debian-image-to-buster/)
+
 
 
