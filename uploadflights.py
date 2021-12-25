@@ -22,6 +22,7 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 """
 
+import configparser
 import json
 import math
 import signal
@@ -33,12 +34,17 @@ import time
 from datetime import datetime, timedelta, timezone
 from dataclasses import dataclass
 
-# Constants
-DEFAULT_TARGET_HOST = "localhost"
-DATA_TIME_INTERVAL_SECONDS = 10
-DATA_TTL_AFTER_UPLOAD_MINUTES = 5
+import os
+from azure.iot.device import IoTHubDeviceClient, Message
 
-device_id = 166244
+# Configuration parameters
+device_id: int
+target_host: str
+data_retrieval_interval_seconds: float
+data_cleanup_interval_minutes: int
+device_connection_string: str
+
+# Globals
 nextfire = time.time()
 done = False
 seen_flights = {}
@@ -116,11 +122,9 @@ def cleanup_seen_flights():
     for flight in seen_flights.values():
         if (flight.UploadedTime != None):
             uploaded_time = flight.UploadedTime
-            if (datetime.now(timezone.utc) > uploaded_time + timedelta(minutes=DATA_TTL_AFTER_UPLOAD_MINUTES)):
-                print(flight.FlightNumber)
+            if (datetime.now(timezone.utc) > uploaded_time + timedelta(minutes = data_cleanup_interval_minutes)):
                 remove_list.append(flight.ModeSCode)
 
-    print(remove_list)
     for item in remove_list:
         del seen_flights[item]
 
@@ -171,7 +175,7 @@ def process_flight_records(flights):
         if (value['hex'] in seen_flights):  # have we already seen this flight?
             flight_info_dto = seen_flights[value['hex']]
             if (flight_info_dto.UploadedTime != None): continue # the record has already been uploaded, so ignore
-            if (seen_ago > DATA_TIME_INTERVAL_SECONDS): # it's been over 10s since we saw this plane in a previous frame, no fresh data
+            if (seen_ago > data_retrieval_interval_seconds): # it's been over 10s since we saw this plane in a previous frame, no fresh data
                 current_flights[value['hex']] = flight_info_dto
                 continue
         
@@ -182,19 +186,23 @@ def process_flight_records(flights):
             seen_flights[flight_info_dto.ModeSCode] = flight_info_dto
 
     upload_list = []
-    print("************* seen ******************")
+    # Get upload list ready
     for flight in seen_flights.values():
-        print(flight.FlightNumber)
         if (flight.UploadedTime == None) and (flight.ModeSCode not in current_flights):
-            upload_list.append(flight)
             flight.UploadedTime = datetime.now(timezone.utc)
+            upload_list.append(flight.to_dictionary())
     
-    print("************* upload ******************")
-    for flight in upload_list:
-        print(flight)
-        print(json.dumps(flight.to_dictionary(), sort_keys = False, indent = 4))
+    # Upload
+    if (len(upload_list) > 0):
+        device_client = IoTHubDeviceClient.create_from_connection_string(device_connection_string)
+        device_client.connect()
+        message = Message(json.dumps(upload_list))
+        message.content_encoding = "utf-8"
+        message.content_type = "application/json"
+        device_client.send_message(message)
+        device_client.shutdown()
 
-    print("************* clean ******************")
+    # Cleanup
     cleanup_seen_flights()
 
 
@@ -210,26 +218,43 @@ def handle_timer(request_uri):
     if (done):
         print ('Exiting...')
         return
-    print(time.time())
     r = requests.get(request_uri)
     if (r.status_code == requests.codes.ok):
         flights = r.json()
-        print(flights)
         process_flight_records(flights)
         
     
-    nextfire += DATA_TIME_INTERVAL_SECONDS
+    nextfire += data_retrieval_interval_seconds
     threading.Timer(nextfire - time.time(), handle_timer, [request_uri]).start()
+
+def get_configuration(config_file):
+    global device_id
+    global target_host
+    global data_retrieval_interval_seconds
+    global data_cleanup_interval_minutes
+    global device_connection_string
+
+    config = configparser.ConfigParser()
+    config.read(config_file)
+
+    target_host = config['DEFAULT']['TargetHost']
+    data_retrieval_interval_seconds = int(config['DEFAULT']['DataRetrievalIntervalSeconds'])
+    data_cleanup_interval_minutes = float(config['DEFAULT']['DataCleanupIntervalMinutes'])
+    device_id = config['DEVICE']['DeviceId']
+    device_connection_string = config['DEVICE']['DeviceConnectionString']
 
 def main():
     signal.signal(signal.SIGINT, signal_handler)
     signal.signal(signal.SIGTERM, signal_handler)
 
-    target_ip = DEFAULT_TARGET_HOST
     if (len(sys.argv) > 1):
-        target_ip = sys.argv[1]
+        config_file = sys.argv[1]
+        get_configuration(config_file)
+    else:
+        print("Missing configuration file.")
+        exit(0)
     
-    request_uri = 'http://{}:8080/data/aircraft.json'.format(target_ip)
+    request_uri = 'http://{}:8080/data/aircraft.json'.format(target_host)
 
     handle_timer(request_uri)
 
