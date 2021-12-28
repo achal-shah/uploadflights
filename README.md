@@ -24,8 +24,7 @@ opportunity!  Fortunately Azure IoT supports a variety of high level languages o
 As is always when you try something new, I learnt a lot along the way, mainly about tooling and working with WSL and Debian.  I had picked the Debian distribution for WSL since the Pi runs Raspabian which is a port of Debian for the Pi.
 
 ### Visual Studio Code and WSL
-I learnt how to use VS Code (running in Windows) so that it interacts directly with WSL.  You first have to install the Visual Studio Code Remove Development Extension [pack](https://marketplace.visualstudio.com/items?itemName=ms-vscode-remote.vscode-remote-extensionpack).  Then you fire up your Debian Bash shell and navigate to the location of your project and type in "code .".  The first time you do this, it will install
-a small server to allow VS Code to interact with WSL.
+I learnt how to use VS Code (running in Windows) so that it interacts directly with WSL.  You first have to install the Visual Studio Code Remote Development Extension [pack](https://marketplace.visualstudio.com/items?itemName=ms-vscode-remote.vscode-remote-extensionpack).  Then you fire up your Debian Bash shell and navigate to the location of your project and type in "code .".  The first time you do this, it will install a small server to allow VS Code to interact with WSL.
 
 Using this arrangement, I am able to code using VS Code and then directly execute the code in WSL.  This made running and testing my code easy as I was working directly in Debian instead of Windows.  Of course, one can do the same running Python directly on Windows, but I wanted the Linux experience.
 
