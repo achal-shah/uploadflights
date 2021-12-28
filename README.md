@@ -13,7 +13,9 @@ on any particular day.  The way I did this is to write a small program, which wo
 ### Motivation
 Originally (1-2 years ago), this was an opportunity to learn how to run a .Net Core application on a Raspberry Pi and I wrote a small program to get the flight information.  I decided to treat the device as an IoT device and so it was also an opportunity to learn Azure IoT Hub which receives data from the receivers and then invokes an Azure function to process it.  Finally, the system is completed with a small website which displays the data in a tabular form.  
 
-So now when I am not watching planes in real time, the system keeps track of what is being seen.  At any time, I can just go to my website to see how many unique flights were seen and to find interesting ones.  For example, since I live close to Seattle, I see frequent Boeing test flights, and at times, the first delivery flights when a customer picks up their brand new plane and takes it home.  This is what the system looks like:
+So now when I am not watching planes in real time, the system keeps track of what is being seen.  At any time, I can just go to my website to see how many unique flights were seen and to find interesting ones.  For example, since I live close to Seattle, I see frequent Boeing test flights, and at times, the first delivery flights when a customer picks up their brand new plane and takes it home.  For example, EVA Air picked up their new Boeing 777-200LR on 27th December, 2021 and [flew](https://flightaware.com/live/flight/EVA689) it to Taiwan.
+
+This is what the system looks like:
 
 ![Image](piaware_system.jpg "System")
 
