@@ -111,10 +111,15 @@ def update_flight_info(flight_info: FlightInformationDto, flight_record, now):
     """Updates the altitude, position, heading and time seen information from the flight record."""
     altitude = get_altitude(flight_record)
 
-    flight_info.Altitude = altitude
-    if ('lat' in flight_record): flight_info.Latitude = flight_record["lat"]
-    if ('lon' in flight_record): flight_info.Longitude = flight_record["lon"]
-    if ('track' in flight_record): flight_info.Heading = flight_record["track"]
+    if ('lat' in flight_record
+        and 'lon' in flight_record
+        and 'track' in flight_record
+        and altitude != 0):
+        flight_info.Latitude = flight_record["lat"]
+        flight_info.Longitude = flight_record["lon"]
+        flight_info.Heading = flight_record["track"]
+        flight_info.Altitude = altitude
+    
     flight_info.TimeAtLocation = (now - timedelta(seconds=flight_record["seen"]))
 
 def cleanup_seen_flights():
@@ -198,18 +203,23 @@ def process_flight_records(flights):
             upload_list.append(flight.to_dictionary())
     
     # Upload
-    if (len(upload_list) > 0):
-        device_client = IoTHubDeviceClient.create_from_connection_string(device_connection_string)
-        device_client.connect()
-        message = Message(json.dumps(upload_list))
-        message.content_encoding = "utf-8"
-        message.content_type = "application/json"
-        device_client.send_message(message)
-        device_client.shutdown()
+    try:
+        if (len(upload_list) > 0):
+            device_client = IoTHubDeviceClient.create_from_connection_string(device_connection_string)
+            device_client.connect()
+            message = Message(json.dumps(upload_list))
+            message.content_encoding = "utf-8"
+            message.content_type = "application/json"
+            device_client.send_message(message)
+            device_client.shutdown()
 
-    # Cleanup
-    cleanup_seen_flights()
-
+        # Cleanup
+        cleanup_seen_flights()
+    except:
+        #reset so the records will be processed the next time around
+        for fd in upload_list:
+            missed_flight = next(f for f in seen_flights.values() if (f.FlightNumber == fd['FlightNumber']))
+            missed_flight.UploadedTime = None
 
 
 def handle_timer(request_uri):
