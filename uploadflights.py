@@ -212,14 +212,14 @@ def process_flight_records(flights):
             message.content_type = "application/json"
             device_client.send_message(message)
             device_client.shutdown()
-
-        # Cleanup
-        cleanup_seen_flights()
     except:
         #reset so the records will be processed the next time around
         for fd in upload_list:
             missed_flight = next(f for f in seen_flights.values() if (f.FlightNumber == fd['FlightNumber']))
             missed_flight.UploadedTime = None
+
+    # Cleanup
+    cleanup_seen_flights()
 
 
 def handle_timer(request_uri):
