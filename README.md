@@ -65,6 +65,16 @@ From this I could see the program bailing because it could not find the requests
     sudo -b -u pi python3 /home/pi/uploadflights/uploadflights.py /home/pi/uploadflights/uploadflights.ini
     
  This executes the script as the pi user and the -b flag puts it in the background.
+
+ ### Configuring as a service
+ The /etc/rc.local method described above is deprecated. I therefore switched to the systemd method.  To do this:
+
+ 1. Copy the uploadflights.service file to /lib/systemd/system/uploadflights.service
+ 2. sudo chmod 644 /lib/systemd/system/uploadflights.service
+ 3. sudo systemctl daemon-reload
+ 4. sudo systemctl enable uploadflights
+
+ To check the status: sudo systemctl status uploadflights.  Other verbs are stop and start.
  
  ### Upgrading Debian on WSL
  The Debian install in WSL is fairly old - "stretch".  To get to parity with Raspabian, I upgraded it to "buster" by executing the following steps using the instructions [here](https://davidsmith.is/2019/07/11/updating-your-wsl-debian-image-to-buster/).
