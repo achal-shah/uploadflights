@@ -1,0 +1,13 @@
+[Unit]
+Description=Upload Flights Service
+After=multi-user.target
+
+[Service]
+Type=idle
+ExecStart=python3 /home/pi/uploadflights/uploadflights.py /home/pi/uploadflights/uploadflights.ini
+WorkingDirectory=/home/pi/uploadflights
+User=pi
+
+[Install]
+WantedBy=multi-user.target
+
