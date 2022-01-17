@@ -102,8 +102,12 @@ def signal_handler(signum, frame):
 def get_altitude(flight_record):
     """Gets the altitude from the flight record, preferring the barometric."""
     altitude = 0
-    if ('alt_baro' in flight_record): altitude = flight_record['alt_baro']
-    elif ('alt_geom' in flight_record): altitude = flight_record['alt_geom']
+    if ('alt_baro' in flight_record):
+        if (flight_record['alt_baro'] != 'ground') and (flight_record['alt_baro'] != ''):
+            altitude = flight_record['alt_baro']
+    elif ('alt_geom' in flight_record):
+        if (flight_record['alt_geom'] != 'ground') and (flight_record['alt_geom'] != ''):
+            altitude = flight_record['alt_geom']
     return altitude
 
 
