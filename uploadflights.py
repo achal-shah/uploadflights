@@ -49,6 +49,7 @@ nextfire = time.time()
 done = False
 done_event = threading.Event()
 seen_flights = {}
+device_client: None
 
 @dataclass
 class FlightInformationDto:
@@ -174,6 +175,7 @@ def process_flight_records(flights):
     The records are extracted from the json and each is processed. If it is not complete, it is passed over.
     """
     global seen_flights
+    global device_client
 
     records = flights["aircraft"]
     epoch_time = flights["now"]
@@ -210,13 +212,10 @@ def process_flight_records(flights):
     # Upload
     try:
         if (len(upload_list) > 0):
-            device_client = IoTHubDeviceClient.create_from_connection_string(device_connection_string)
-            device_client.connect()
             message = Message(json.dumps(upload_list))
             message.content_encoding = "utf-8"
             message.content_type = "application/json"
             device_client.send_message(message)
-            device_client.shutdown()
     except Exception as e:
         print(e)
         #reset so the records will be processed the next time around
@@ -268,12 +267,16 @@ def get_configuration(config_file):
 
 def main():
     global done_event
+    global device_client
+    global device_connection_string
+
     signal.signal(signal.SIGINT, signal_handler)
     signal.signal(signal.SIGTERM, signal_handler)
 
     if (len(sys.argv) > 1):
         config_file = sys.argv[1]
         get_configuration(config_file)
+        device_client = IoTHubDeviceClient.create_from_connection_string(device_connection_string)
     else:
         print("Missing configuration file.")
         exit(0)
@@ -282,6 +285,7 @@ def main():
 
     handle_timer(request_uri)
     done_event.wait()
+    device_client.shutdown()
 
 if __name__ == "__main__":
     main()
