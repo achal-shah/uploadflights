@@ -47,6 +47,7 @@ device_connection_string: str
 # Globals
 nextfire = time.time()
 done = False
+done_event = threading.Event()
 seen_flights = {}
 
 @dataclass
@@ -102,8 +103,12 @@ def signal_handler(signum, frame):
 def get_altitude(flight_record):
     """Gets the altitude from the flight record, preferring the barometric."""
     altitude = 0
-    if ('alt_baro' in flight_record): altitude = flight_record['alt_baro']
-    elif ('alt_geom' in flight_record): altitude = flight_record['alt_geom']
+    if ('alt_baro' in flight_record):
+        if (flight_record['alt_baro'] != 'ground') and (flight_record['alt_baro'] != ''):
+            altitude = flight_record['alt_baro']
+    elif ('alt_geom' in flight_record):
+        if (flight_record['alt_geom'] != 'ground') and (flight_record['alt_geom'] != ''):
+            altitude = flight_record['alt_geom']
     return altitude
 
 
@@ -212,7 +217,8 @@ def process_flight_records(flights):
             message.content_type = "application/json"
             device_client.send_message(message)
             device_client.shutdown()
-    except:
+    except Exception as e:
+        print(e)
         #reset so the records will be processed the next time around
         for fd in upload_list:
             missed_flight = next(f for f in seen_flights.values() if (f.FlightNumber == fd['FlightNumber']))
@@ -229,9 +235,11 @@ def handle_timer(request_uri):
     """
     global nextfire
     global done
+    global done_event
 
     if (done):
         print ('Exiting...')
+        done_event.set()
         return
     r = requests.get(request_uri)
     if (r.status_code == requests.codes.ok):
@@ -259,6 +267,7 @@ def get_configuration(config_file):
     device_connection_string = config['DEVICE']['DeviceConnectionString']
 
 def main():
+    global done_event
     signal.signal(signal.SIGINT, signal_handler)
     signal.signal(signal.SIGTERM, signal_handler)
 
@@ -272,6 +281,7 @@ def main():
     request_uri = 'http://{}:8080/data/aircraft.json'.format(target_host)
 
     handle_timer(request_uri)
+    done_event.wait()
 
 if __name__ == "__main__":
     main()
