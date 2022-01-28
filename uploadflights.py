@@ -266,6 +266,7 @@ def get_configuration(config_file):
     device_connection_string = config['DEVICE']['DeviceConnectionString']
 
 def main():
+    global done_event
     global device_client
     global device_connection_string
 
