@@ -280,7 +280,7 @@ def main():
     if (len(sys.argv) > 1):
         config_file = sys.argv[1]
         get_configuration(config_file)
-        device_client = IoTHubDeviceClient.create_from_connection_string(device_connection_string)
+        device_client = IoTHubDeviceClient.create_from_connection_string(device_connection_string, connection_retry=False)
     else:
         print("Missing configuration file.")
         exit(0)
