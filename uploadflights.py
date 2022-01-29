@@ -128,9 +128,8 @@ def update_flight_info(flight_info: FlightInformationDto, flight_record, now):
     
     flight_info.TimeAtLocation = (now - timedelta(seconds=flight_record["seen"]))
 
-def cleanup_seen_flights():
+def cleanup_seen_flights(seen_flights):
     """Removes flights from the global dictionary after they have been uploaded and 5 minutes have passed."""
-    global seen_flights
 
     remove_list = []
     for flight in seen_flights.values():
@@ -141,8 +140,6 @@ def cleanup_seen_flights():
 
     for item in remove_list:
         del seen_flights[item]
-
-
 
 
 def populate_flight_info(flight_info: FlightInformationDto, flight_record, now):
@@ -169,13 +166,30 @@ def populate_flight_info(flight_info: FlightInformationDto, flight_record, now):
     update_flight_info(flight_info, flight_record, now)
 
 
+def upload_flight_records(upload_list, seen_flights):
+    global device_client
+
+    try:
+        if (len(upload_list) > 0):
+            message = Message(json.dumps(upload_list))
+            message.content_encoding = "utf-8"
+            message.content_type = "application/json"
+            device_client.send_message(message)
+    except Exception as e:
+        print("Exception while sending " + json.dumps(upload_list))
+        print(e)
+        #reset so the records will be processed the next time around
+        for fd in upload_list:
+            missed_flight = next(f for f in seen_flights.values() if (f.FlightNumber == fd['FlightNumber']))
+            missed_flight.UploadedTime = None
+
+
 def process_flight_records(flights):
     """Processes flight records received from the Pi.
 
     The records are extracted from the json and each is processed. If it is not complete, it is passed over.
     """
     global seen_flights
-    global device_client
 
     records = flights["aircraft"]
     epoch_time = flights["now"]
@@ -210,21 +224,11 @@ def process_flight_records(flights):
             upload_list.append(flight.to_dictionary())
     
     # Upload
-    try:
-        if (len(upload_list) > 0):
-            message = Message(json.dumps(upload_list))
-            message.content_encoding = "utf-8"
-            message.content_type = "application/json"
-            device_client.send_message(message)
-    except Exception as e:
-        print(e)
-        #reset so the records will be processed the next time around
-        for fd in upload_list:
-            missed_flight = next(f for f in seen_flights.values() if (f.FlightNumber == fd['FlightNumber']))
-            missed_flight.UploadedTime = None
+    if (len(upload_list) > 0):
+        upload_flight_records(upload_list, seen_flights)
 
     # Cleanup
-    cleanup_seen_flights()
+    cleanup_seen_flights(seen_flights)
 
 
 def handle_timer(request_uri):
