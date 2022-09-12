@@ -27,6 +27,7 @@ import json
 import math
 import signal
 import sys
+from urllib import response
 import requests
 import threading
 import time
@@ -43,6 +44,9 @@ target_host: str
 data_retrieval_interval_seconds: float
 data_cleanup_interval_minutes: int
 device_connection_string: str
+function_uri: str
+function_key: str
+mode_rest: bool
 
 # Globals
 nextfire = time.time()
@@ -166,15 +170,21 @@ def populate_flight_info(flight_info: FlightInformationDto, flight_record, now):
     update_flight_info(flight_info, flight_record, now)
 
 
-def upload_flight_records(upload_list, seen_flights):
+def upload_flight_records(upload_list):
     global device_client
 
     try:
         if (len(upload_list) > 0):
-            message = Message(json.dumps(upload_list))
-            message.content_encoding = "utf-8"
-            message.content_type = "application/json"
-            device_client.send_message(message)
+            if (mode_rest == True):
+                resp = requests.post(function_uri, params={'code': function_key}, json=upload_list)
+                if (resp.status_code != 200):
+                    print("Failure code" + resp.status_code)
+            else:
+                message = Message(json.dumps(upload_list))
+                message.content_encoding = "utf-8"
+                message.content_type = "application/json"
+                device_client.send_message(message)
+            
     except Exception as e:
         print("Exception while sending " + json.dumps(upload_list))
         print(e)
@@ -221,11 +231,12 @@ def process_flight_records(flights):
     for flight in seen_flights.values():
         if (flight.UploadedTime == None) and (flight.ModeSCode not in current_flights):
             flight.UploadedTime = datetime.now(timezone.utc)
-            upload_list.append(flight.to_dictionary())
+            if (flight.Latitude != None and flight.Longitude != None and flight.Heading != None):
+                upload_list.append(flight.to_dictionary())
     
     # Upload
     if (len(upload_list) > 0):
-        upload_flight_records(upload_list, seen_flights)
+        upload_flight_records(upload_list)
 
     # Cleanup
     cleanup_seen_flights(seen_flights)
@@ -259,6 +270,9 @@ def get_configuration(config_file):
     global data_retrieval_interval_seconds
     global data_cleanup_interval_minutes
     global device_connection_string
+    global function_uri
+    global function_key
+    global mode_rest
 
     config = configparser.ConfigParser()
     config.read(config_file)
@@ -268,6 +282,9 @@ def get_configuration(config_file):
     data_cleanup_interval_minutes = float(config['DEFAULT']['DataCleanupIntervalMinutes'])
     device_id = config['DEVICE']['DeviceId']
     device_connection_string = config['DEVICE']['DeviceConnectionString']
+    function_uri = config['REST']['FunctionUri']
+    function_key = config['REST']['FunctionKey']
+    mode_rest = (config['DEFAULT']['Mode'] == 'REST')
 
 def main():
     global done_event
