@@ -170,28 +170,38 @@ def populate_flight_info(flight_info: FlightInformationDto, flight_record, now):
     update_flight_info(flight_info, flight_record, now)
 
 
-def upload_flight_records(upload_list):
+def upload_flight_records(upload_list, retries = 5):
     global device_client
 
-    try:
-        if (len(upload_list) > 0):
-            if (mode_rest == True):
-                resp = requests.post(function_uri, params={'code': function_key}, json=upload_list)
-                if (resp.status_code != 200):
-                    print("Failure code" + resp.status_code)
-            else:
-                message = Message(json.dumps(upload_list))
-                message.content_encoding = "utf-8"
-                message.content_type = "application/json"
-                device_client.send_message(message)
-            
-    except Exception as e:
-        print("Exception while sending " + json.dumps(upload_list))
-        print(e)
-        #reset so the records will be processed the next time around
-        for fd in upload_list:
-            missed_flight = next(f for f in seen_flights.values() if (f.FlightNumber == fd['FlightNumber']))
-            missed_flight.UploadedTime = None
+    if (len(upload_list) > 0):
+        for attempt in range(retries):
+            try:
+                if (mode_rest == True):
+                    resp = requests.post(function_uri, params={'code': function_key}, json=upload_list, headers={'Connection': 'close'})
+                    if (resp.status_code != 200):
+                        print("Failure code" + str(resp.status_code))
+                else:
+                    message = Message(json.dumps(upload_list))
+                    message.content_encoding = "utf-8"
+                    message.content_type = "application/json"
+                    device_client.send_message(message)
+                return None
+            except Exception as e:
+                print("Attempt " + str(attempt + 1) + " Exception while sending " + json.dumps(upload_list))
+                print(e)
+
+        # Final attempt with a fresh session
+        try:
+            s = requests.Session()
+            return s.post(function_uri, params={'code': function_key}, json=upload_list, headers={'Connection': 'close'})
+        except Exception as e:
+            print("Exception while sending " + json.dumps(upload_list))
+            print(e)
+            #reset so the records will be processed the next time around
+            for fd in upload_list:
+                missed_flight = next(f for f in seen_flights.values() if (f.FlightNumber == fd['FlightNumber']))
+                missed_flight.UploadedTime = None
+        return None
 
 
 def process_flight_records(flights):
