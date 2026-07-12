@@ -1,0 +1,36 @@
+name: Build Python Binary
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - 'uploadflights/**'
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up QEMU for ARM emulation
+        uses: docker/setup-qemu-action@v4
+
+      - name: Build ARMv6 binary in container
+        run: |
+          mkdir -p artifact
+          docker run --rm --platform linux/arm/v6 \
+            -v "$PWD":/src \
+            -w /src \
+            python:3.11-slim-bullseye \
+            bash -lc "python -m pip install --upgrade pip && pip install pyinstaller && pyinstaller --onefile uploadflights.py && cp dist/uploadflights /src/artifact/"
+          ls -l artifact
+
+      - name: Upload compiled binary artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: uploadflights-binary
+          path: artifact/uploadflights
