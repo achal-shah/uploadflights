@@ -3,9 +3,10 @@ name: Build Python Binary
 on:
   push:
     branches:
-      - 'topic/reqeust_fix'
+      - main
     paths:
       - 'uploadflights/**'
+  workflow_dispatch:
 
 jobs:
   build:
