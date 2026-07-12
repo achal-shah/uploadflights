@@ -25,7 +25,7 @@ jobs:
           docker run --rm --platform linux/arm/v7 \
             -v "$PWD":/src \
             -w /src \
-            arm32v7/python:3.11-slim-bullseye \
+            arm32v7/python:3.11-bullseye \
             bash -lc "python -m pip install --upgrade pip && pip install pyinstaller && pyinstaller --onefile uploadflights.py && cp dist/uploadflights /src/artifact/"
           ls -l artifact
 
