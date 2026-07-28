@@ -56,37 +56,44 @@ seen_flights = {}
 device_client: None
 
 @dataclass
+class PositionInformationDto:
+    """Struct to capture position information."""
+    Latitude: float = None
+    Longitude: float = None
+    Heading: float = None
+    Altitude: int = 0
+
+@dataclass
 class FlightInformationDto:
     """Struct to capture flight information."""
     ModeSCode: str = None
     Location: str = None
     FlightNumber: str = None
-    Altitude: int = 0
-    Latitude: float = None
-    Longitude: float = None
-    Heading: float = None
+    FirstSeenPosition: PositionInformationDto = None
+    LastSeenPosition: PositionInformationDto = None
     AscentCount: int = 0
     TimeAtLocation: datetime = None
     UploadedTime: datetime = None
 
     def is_descending(self) -> bool:
-        return self.AscentCount < 0
+        return self.FirstSeenPosition.Altitude > self.LastSeenPosition.Altitude
 
     def is_ascending(self) -> bool:
-        return self.AscentCount > 0
+        return self.FirstSeenPosition.Altitude < self.LastSeenPosition.Altitude
 
     def is_level(self) -> bool:
-        return self.AscentCount == 0
+        return self.FirstSeenPosition.Altitude == self.LastSeenPosition.Altitude
 
     def to_dictionary(self):
+        position = self.LastSeenPosition if (self.is_ascending() or self.is_level()) else self.FirstSeenPosition
         my_fields = {
             "ModeSCode": self.ModeSCode,
             "Location": self.Location,
             "FlightNumber": self.FlightNumber,
-            "Altitude": self.Altitude,
-            "Latitude": self.Latitude,
-            "Longitude": self.Longitude,
-            "Heading": self.Heading,
+            "Altitude": position.Altitude,
+            "Latitude": position.Latitude,
+            "Longitude": position.Longitude,
+            "Heading": position.Heading,
             "AscentCount": self.AscentCount,
             "TimeAtLocation": self.TimeAtLocation.isoformat(),
             "UploadedTime": self.UploadedTime.isoformat()
@@ -117,21 +124,6 @@ def get_altitude(flight_record):
     return altitude
 
 
-def update_flight_info(flight_info: FlightInformationDto, flight_record, now):
-    """Updates the altitude, position, heading and time seen information from the flight record."""
-    altitude = get_altitude(flight_record)
-
-    if ('lat' in flight_record
-        and 'lon' in flight_record
-        and 'track' in flight_record
-        and altitude != 0):
-        flight_info.Latitude = flight_record["lat"]
-        flight_info.Longitude = flight_record["lon"]
-        flight_info.Heading = flight_record["track"]
-        flight_info.Altitude = altitude
-    
-    flight_info.TimeAtLocation = (now - timedelta(seconds=flight_record["seen"]))
-
 def cleanup_seen_flights(seen_flights):
     """Removes flights from the global dictionary after they have been uploaded and 5 minutes have passed."""
 
@@ -143,31 +135,39 @@ def cleanup_seen_flights(seen_flights):
                 remove_list.append(flight.ModeSCode)
 
     for item in remove_list:
-        del seen_flights[item]
+        if item in seen_flights:
+            del seen_flights[item]
 
 
 def populate_flight_info(flight_info: FlightInformationDto, flight_record, now):
     """Populates a flight information structure from the raw flight record received."""
-    flight_info.ModeSCode = flight_record['hex'].strip()
-    flight_info.Location = device_id
-    flight_info.FlightNumber = flight_record['flight'].strip()
+    modeSCode = flight_record['hex'].strip()
+    flightNumber = flight_record['flight'].strip()
+    if flight_info.ModeSCode is None and modeSCode != '':
+        flight_info.ModeSCode = modeSCode
+    if flight_info.FlightNumber is None and flightNumber != '':
+        flight_info.FlightNumber = flightNumber
+    if flight_info.Location is None:
+        flight_info.Location = device_id
 
+    """Updates the altitude, position, heading and time seen information from the flight record."""
     altitude = get_altitude(flight_record)
-
-    if (flight_info.Altitude != 0): # not seeing this for the first time
-        if (altitude != flight_info.Altitude):
-            ascent_count = flight_info.AscentCount
-            if (altitude < (flight_info.Altitude - 25 )): # Allow for jitter
-                ascent_count -= 1
-            elif (altitude > (flight_info.Altitude + 25 )):
-                ascent_count += 1
-            
-            flight_info.AscentCount = ascent_count
-            if (flight_info.is_descending() or flight_info.is_level()):
-                if (flight_info.Latitude != None and flight_info.Longitude != None and flight_info.Heading != None):
-                    return # all data is populated, using earliest complete record, so do not update
     
-    update_flight_info(flight_info, flight_record, now)
+    if ('lat' in flight_record
+        and 'lon' in flight_record
+        and 'track' in flight_record
+        and altitude != 0):
+        position = PositionInformationDto(
+            Latitude=flight_record["lat"],
+            Longitude=flight_record["lon"],
+            Heading=flight_record["track"],
+            Altitude=altitude,
+        )
+        if flight_info.FirstSeenPosition is None:
+            flight_info.FirstSeenPosition = position
+        flight_info.LastSeenPosition = position
+
+    flight_info.TimeAtLocation = (now - timedelta(seconds=flight_record["seen"]))
 
 
 def upload_flight_records(upload_list, retries = 5):
@@ -222,26 +222,33 @@ def process_flight_records(flights):
         if ('seen' not in value): continue
         
         seen_ago = value['seen']
-        flight_info_dto = FlightInformationDto()
+
+        flight_info_dto = None
         if (value['hex'] in seen_flights):  # have we already seen this flight?
             flight_info_dto = seen_flights[value['hex']]
-            if (flight_info_dto.UploadedTime != None): continue # the record has already been uploaded, so ignore
-            if (seen_ago > data_retrieval_interval_seconds): # it's been over 10s since we saw this plane - there is no fresh data
-                current_flights[value['hex']] = flight_info_dto
-                continue
-        
+        else:
+            flight_info_dto = FlightInformationDto()
         populate_flight_info(flight_info_dto, value, now)
+
+        if (flight_info_dto.UploadedTime != None): continue # the record has already been uploaded, so ignore
+        if (seen_ago > data_retrieval_interval_seconds): # it's been over 10s since we saw this plane - there is no fresh data
+            current_flights[value['hex']] = flight_info_dto
+            continue
+        
         current_flights[flight_info_dto.ModeSCode] = flight_info_dto
 
         if (flight_info_dto.ModeSCode not in seen_flights):
             seen_flights[flight_info_dto.ModeSCode] = flight_info_dto
 
     upload_list = []
-    # Get upload list ready - flight is uploaded if we can't see it any more, i.e. it is not in current_flights
+    # Get upload list ready - flight is uploaded if we haven't seen it or can't see it any more, i.e. it is not in current_flights
     for flight in seen_flights.values():
         if (flight.UploadedTime == None) and (flight.ModeSCode not in current_flights):
             flight.UploadedTime = datetime.now(timezone.utc)
-            if (flight.Latitude != None and flight.Longitude != None and flight.Heading != None):
+            if (flight.LastSeenPosition is not None
+                and flight.LastSeenPosition.Latitude is not None
+                and flight.LastSeenPosition.Longitude is not None
+                and flight.LastSeenPosition.Heading is not None):
                 upload_list.append(flight.to_dictionary())
     
     # Upload
